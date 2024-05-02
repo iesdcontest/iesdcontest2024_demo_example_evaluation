@@ -2,7 +2,7 @@
 
 通过大赛提供的[Tensorflow例程](https://github.com/iesdcontest/iesdcontest2024_demo_example_tensorflow.git),
 在训练数据集训练后，可以获得`.tflite`格式的模型权重文件。
-本例程将描述如何将`.tflite`神经网络模型部署至龙芯2K500先锋板。
+本例程基于[tflite-micro](https://github.com/tensorflow/tflite-micro)项目，描述如何将`.tflite`神经网络模型部署至龙芯2K500先锋板。
 
 
 ## 1.1 安装依赖的python环境
@@ -34,7 +34,10 @@ apt-get install libjpeg-dev zlib1g-dev
 ```commandline
 git clone https://github.com/iesdcontest/iesdcontest2024_demo_example_deployment.git
 ```
-
+将在服务器上训练完成的`.tflite`模型文件，更名为`af_detect.tflite`，放置于
+```commandline
+./tflite-micro/tensorflow/lite/micro/models/
+```
 
 ## 1.3 环境配置
 
@@ -84,7 +87,7 @@ make  $MKFLAGS af_detection -j8
 ```
 
 运行成功后，会在`./gen/linux_x86_64_default_gcc/bin/`得到`af_detection`可执行文件。通过如下命令，可以确认生成的是LoongArch的可执行文件：
-![Image text]()
+![](https://github.com/iesdcontest/iesdcontest2024_demo_example_deployment/raw/main/img/af_detection_cross_compile.png)
 
 
 # 二、神经网络部署（龙芯2K500先锋板）
@@ -92,7 +95,7 @@ make  $MKFLAGS af_detection -j8
 ## 2.1 上位机与先锋板的串口通信设置
 
 此处通讯为串口方式（也可采用ssh）。因此，需要两根串口线连接先锋板与上位机（PC机）。接线方式如图所示：
-![]()
+![](https://github.com/iesdcontest/iesdcontest2024_demo_example_deployment/raw/main/img/communication-2k500.png)
 
 1. 针对debug串口接线：打开下载好的MobatXterm工具，点击Sesssion按键进入下一个页面，随后点击按键Serial,选择对应的COM口，设置波特率为115200，点击下方的Flow control选择None，其余按照默认值即可；
     具体接线可参考[龙芯2K500先锋板用户手册](https://1drv.ms/b/s!Aoaif3eONXLCdRdW6pvIiqclVNU?e=09lsKx)章节四-4.1。
