@@ -1,3 +1,8 @@
+# 龙芯先锋板运行端侧AI
+
+本次大赛提供龙芯先锋板运行端侧AI的基础例程，参赛队伍也可根据自身需求，选择不同深度学习框架完成预训练模型在先锋板上的部署和推理计算。
+
+
 # 一、交叉编译（PC端）
 
 通过大赛提供的[Tensorflow例程](https://github.com/iesdcontest/iesdcontest2024_demo_example_tensorflow.git),
@@ -133,7 +138,7 @@ cp /mnt/usb/person_detection ~/
 
 
 
-第一步：上位机侧运行[evaluation_af_detection.py]()
+第一步：上位机侧运行[evaluation_af_detection.py](https://github.com/iesdcontest/iesdcontest2024_demo_example_deployment/blob/main/evaluation_af_detection.py)
 
 
 第二步：打开MobaXterm（上位机）启用相应端口执行
