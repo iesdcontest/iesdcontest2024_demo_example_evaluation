@@ -13,19 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <iostream>
-#include <fcntl.h>      // ÎÄŒþ¿ØÖÆ¶šÒå
-#include <termios.h>    // PPSIX ÖÕ¶Ë¿ØÖÆ¶šÒå
-#include <unistd.h>     // Unix ±ê×Œº¯Êý¶šÒå
-#include <cstring>      // ×Ö·ûŽ®¹ŠÄÜ
-#include <errno.h>      // ŽíÎóºÅ¶šÒå
+#include <fcntl.h>
+#include <termios.h>
+#include <unistd.h>
+#include <cstring>
+#include <errno.h>
 #include <cstdlib>
 #include <sys/time.h>
 #include <string>
 #include <sstream>
 #include "tensorflow/lite/micro/examples/af_detection/main_functions.h"
-// #include "tensorflow/lite/micro/examples/af_detection/detection_responder.h"
-// #include "tensorflow/lite/micro/examples/af_detection/image_provider.h"
-// #include "tensorflow/lite/micro/examples/af_detection/model_settings.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_log.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
@@ -38,7 +35,7 @@ namespace {
 const tflite::Model* model = nullptr;
 tflite::MicroInterpreter* interpreter = nullptr;
 TfLiteTensor* input = nullptr;
-const char *write_buffer = nullptr;
+// const char *write_buffer = nullptr;
 
 // In order to use optimized tensorflow lite kernels, a signed int8_t quantized
 // model is preferred over the legacy unsigned model format. This means that
@@ -51,8 +48,18 @@ const char *write_buffer = nullptr;
 constexpr int kTensorArenaSize = 136 * 1024;
 alignas(16) static uint8_t tensor_arena[kTensorArenaSize];
 int fd ;
-
 }  // namespace
+
+uint8_t result_new[8]={0};// 55 AA  f null   f:0 su 1 fail 2 data
+/* USER CODE END 0 */
+
+union r_dat{
+	float   fdat;
+	uint8_t udat[4];
+};
+struct r_tm{
+	float *cost;
+};
 // return usec
 long long get_timestamp(void)//获取时间戳函数
 {
@@ -63,7 +70,6 @@ long long get_timestamp(void)//获取时间戳函数
     tmp = tv.tv_sec;
     tmp = tmp * 1000 * 1000;
     tmp = tmp + tv.tv_usec;
-
     return tmp;
 }
 //usart
@@ -157,118 +163,123 @@ void setup() {
   // Get information about the memory area to use for the model's input.
   input = interpreter->input(0);
   //usart
-  // fd = open("/dev/ttyS7", O_RDWR | O_NOCTTY);
-  // if (fd == -1) {
-  //     perror("open_port: Unable to open /dev/ttyS7");
-  //}
-  //if (set_interface_attribs(fd, B115200) == -1) {
-  //     close(fd);
-  // }
 }
 
 // The name of this function is important for Arduino compatibility.
 void loop() {
-  // Get image from provider.
-  // if (kTfLiteOk !=
-  //    GetImage(kNumCols, kNumRows, kNumChannels, input->data.f)) {
-  //  MicroPrintf("Image capture failed.");
-  // }
   //usart
-  fd = open("/dev/ttyS7", O_RDWR | O_NOCTTY);
-  if (fd == -1) {
-       perror("open_port: Unable to open /dev/ttyS7");
-  }
-  if (set_interface_attribs(fd, B115200) == -1) {
+    fd = open("/dev/ttyS7", O_RDWR | O_NOCTTY);
+    if (fd == -1) {
+        perror("open_port: Unable to open /dev/ttyS7");
+    }
+    if (set_interface_attribs(fd, B115200) == -1) {
         close(fd);
-   }
-  sleep(1);
-  //get data from usart
-  write_buffer = "begin";
-  if (write(fd, write_buffer, strlen(write_buffer)) < 0) {
-        perror("write");
-        close(fd);
-  }
-  std::cout<<"send begin"<<std::endl;
-  char read_buffer[9];
-  float* test_data = input->data.f; 
-  std::stringstream ss;
-  for(int i=0; i <1250; i++){
-	int flag = 0;
-	while(true){
-		memset(read_buffer, 0, sizeof(read_buffer));
-		int n = read(fd, read_buffer, 8);
-		read_buffer[n]='\0';
-        	if (n < 0) {
-            		perror("read");
-            		close(fd);
-        	}
-		ss << read_buffer;
-        	// std::cout << "Read " << n << " bytes: " << read_buffer << std::endl;
-		for(int j=0; j<n; j++){
-			if(read_buffer[j]==' '){
-				flag = 1;
-				ss >> test_data[i];
-                                // std::cout<<"fdata"<<i<<": "<<test_data[i]<< std::endl;
-				break;
+    }
+    sleep(1);
+    //get data from usart
+
+    float* test_data = input->data.f;
+    std::stringstream ss;
+    float result[2]={0};
+    volatile struct r_tm  rtm;
+    volatile union r_dat 	rdat;
+    uint8_t dat;
+    int len=0,index=0,datalen=0;
+    int status=0;
+    bool flag = false;
+    int ret;
+    // long long utime_start=0;
+    // long long utime_end=0;
+    result_new[0] = 0x55;
+    result_new[1] = 0xaa;
+    result_new[3] = 0x00;
+    rtm.cost = (float *)&result_new[4];
+    while(1){
+        if((ret = read(fd, &dat, 1)) < 0 ){
+            len=0;
+            index=0;
+            datalen=0;
+            status=0;
+        }
+        switch(status){
+            case 0:
+                if(dat==0xaa){
+                    status=1;
+                    //utime_start = get_timestamp();
+                }
+                break;
+            case 1:
+                if(dat==0x55){
+                    status=2;
+                    index = 0;
+                }
+                else{
+                    status=0;
+                }
+                break;
+            case 2:
+                if(index==0){
+                    datalen=dat;
+                    index=1;
+                }
+                else{
+                    datalen|=dat<<8;
+                    status=3;
+                    len=0;
+                    index = 0;
+                }
+                break;
+            case 3:
+                rdat.udat[index++] = dat;
+                if(index>=4){
+                    index = 0;
+                    test_data[len++] = rdat.fdat;
+                }
+                if(len>=datalen){
+                    flag = true;
+                    status=0;
+                    //utime_end = get_timestamp();
+                }else if(len>=1250){
+                    status=0;
+                }
+                break;
+            default:
+                status=0;
+                break;
+            }
+        if(flag){
+            flag = false;
+			// AI run and record time
+            long long start_time = get_timestamp();
+			//aiRun((void*)input,(void*)result);
+			if (kTfLiteOk != interpreter->Invoke()) {
+                MicroPrintf("Invoke failed.");
+            }
+			long long end_time = get_timestamp();
+			long long cost_time = end_time - start_time;
+			// *rtm.end = getCurrentMicros();
+			*rtm.cost = (float)(cost_time/1000.0);
+			// replay results
+			result_new[2]  = 0x00;
+			TfLiteTensor* output = interpreter->output(0);
+			result[0] = output->data.f[0];
+            result[1] = output->data.f[1];
+			if(result[0]>result[1]){
+                result_new[3]  = 0x00;
 			}
+			else{
+				result_new[3]  = 0x01;
+			}
+			// 55aa00XX  start_tm  end_tm
+			write(fd, result_new, 8);
+            // std::cout << "result: " <<result[0]<<" "<<result[1]<< std::endl;
 		}
-		if(flag){
-			break;
+		else if(ret < 0){
+			// replay failed info
+			result_new[2]  = 0x01;
+			// 55aa01XX
+			write(fd, result_new, 4);
+
 		}
 	}
-	MicroPrintf("fdata %d: %f",i,(double)test_data[i]);
-	// std::cout<<"fdata: "<<test_data[i]<< std::endl;
-  }
-  MicroPrintf("data_get_over");
-  long long start_time = get_timestamp();
-  // Run the model on this input and make sure it succeeds.
-  if (kTfLiteOk != interpreter->Invoke()) {
-    MicroPrintf("Invoke failed.");
-  }
-  long long end_time = get_timestamp();
-  long long cost_time = end_time - start_time;
-  MicroPrintf("start_time:%lld, end_time:%lld, cost_time:%lld \n", start_time,end_time, cost_time);
-  // usart return ok
-  write_buffer = "ok";
-  if (write(fd, write_buffer, strlen(write_buffer)) < 0) {
-        perror("write");
-        close(fd);
-  }
-  // recvice 200 status
-  memset(read_buffer, 0, sizeof(read_buffer));
-  int n = read(fd, read_buffer, sizeof(read_buffer));
-  if (n < 0) {
-	    perror("read");
-            close(fd);
-  }
-  // int status = atoi(read_buffer);
-  // return ans and time
-  TfLiteTensor* output = interpreter->output(0);
-  // Process the inference results.
-  double ch0_score = output->data.f[0];
-  double ch1_score = output->data.f[1];
-  char result[20];
-  // RespondToDetection(person_score, no_person_score);
-  MicroPrintf("score: ch0: %f , ch1:%f \n",ch0_score, ch1_score);
-  // ss << cost_time;
-  ss.clear();
-  if(ch0_score>ch1_score){
-	  ss <<"0,";
-	  //strcpy(result,"0,");
-	  //strcat(result,ltoa((long)cost_time)); 
-  }
-  else{
-	  ss <<"1,";
-	  //strcpy(result,"1,");
-          //strcat(result,ltoa((long)cost_time));
-  }
-  ss << cost_time;
-  ss >> result;
-  std::cout<<"result" << result<<std::endl;
-  if (write(fd, result, strlen(result)) < 0) {
-        perror("write");
-        close(fd);
-  }
-  close(fd);
-  MicroPrintf("loop end");
 }
