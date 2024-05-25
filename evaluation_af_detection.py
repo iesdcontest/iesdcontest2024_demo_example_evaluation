@@ -6,7 +6,7 @@ from sklearn.metrics import confusion_matrix
 from tqdm import tqdm
 import os
 import struct
-
+import pandas as pd
 
 def txt_to_numpy(filename, row):
     file = open(filename)
@@ -43,40 +43,128 @@ def print_hex(bytes):
     l = [hex(int(i)) for i in bytes]
     print(" ".join(l))
 
+def ACC(mylist):
+  tp, fn, fp, tn = mylist[0], mylist[1], mylist[2], mylist[3]
+  total = sum(mylist)
+  acc = (tp + tn) / total
+  return acc
 
-import binascii
+def PPV(mylist):
+  tp, fn, fp, tn = mylist[0], mylist[1], mylist[2], mylist[3]
+  # for the case: there is no VA segs for the patient, then ppv should be 1
+  if tp + fn == 0:
+    ppv = 1
+  # for the case: there is some VA segs, but the predictions are wrong
+  elif tp + fp == 0 and tp + fn != 0:
+    ppv = 0
+  else:
+    ppv = tp / (tp + fp)
+  return ppv
 
+
+def NPV(mylist):
+  tp, fn, fp, tn = mylist[0], mylist[1], mylist[2], mylist[3]
+  # for the case: there is no non-VA segs for the patient, then npv should be 1
+  if tn + fp == 0:
+    npv = 1
+  # for the case: there is some VA segs, but the predictions are wrong
+  elif tn + fn == 0 and tn + fp != 0:
+    npv = 0
+  else:
+    npv = tn / (tn + fn)
+  return npv
+
+def Sensitivity(mylist):
+  tp, fn, fp, tn = mylist[0], mylist[1], mylist[2], mylist[3]
+  # for the case: there is no VA segs for the patient, then sen should be 1
+  if tp + fn == 0:
+    sensitivity = 1
+  else:
+    sensitivity = tp / (tp + fn)
+  return sensitivity
+
+
+def Specificity(mylist):
+  tp, fn, fp, tn = mylist[0], mylist[1], mylist[2], mylist[3]
+  # for the case: there is no non-VA segs for the patient, then spe should be 1
+  if tn + fp == 0:
+    specificity = 1
+  else:
+    specificity = tn / (tn + fp)
+  return specificity
+
+
+def BAC(mylist):
+  sensitivity = Sensitivity(mylist)
+  specificity = Specificity(mylist)
+  b_acc = (sensitivity + specificity) / 2
+  return b_acc
+
+
+def F1(mylist):
+  precision = PPV(mylist)
+  recall = Sensitivity(mylist)
+  if precision + recall == 0:
+    f1 = 0
+  else:
+    f1 = 2 * (precision * recall) / (precision + recall)
+  return f1
+
+
+def FB(mylist, beta=2):
+  precision = PPV(mylist)
+  recall = Sensitivity(mylist)
+  if precision + recall == 0:
+    f1 = 0
+  else:
+    f1 = (1 + beta ** 2) * (precision * recall) / ((beta ** 2) * precision + recall)
+  return f1
 
 def main():
-    t = time.strftime('%Y-%m-%d_%H-%M-%S')
+
+    test_indice_path = args.path_indices + 'test_indice.csv'
+    test_indices = pd.read_csv(test_indice_path)  # Adjust delimiter if necessary
+    subjects = test_indices['Filename'].apply(lambda x: x.split('-')[0]).unique().tolist()
+    # List to store metrics for each participant
+    subject_metrics = []
+    subjects_above_threshold = 0
+
     if not os.path.exists('./log/'):
         os.makedirs('./log/')
-    List = []
-    resultList = []
-    labelList = []
-    timeList = []
+    dataList = {}
+
+    for subject_id in subjects:
+      dataList[subject_id] = []
+
+    for file in test_indices['Filename']:
+      subject_id = file.split('-')[0]
+      dataList[subject_id].append(file)
+
     port = args.com  # set port number
     ser = serial.Serial(port=port, baudrate=args.baudrate, timeout=10)  # open the serial , timeout=1
     ser.set_buffer_size(rx_size=12800, tx_size=12800)
     print(ser)
 
-    f = open('./testset_index.txt', 'r')
-    for line in f:
-        List.append(line)
-    ofp = open(file='log/res_{}.txt'.format(t), mode='w')  # make a new log file
-    for idx in tqdm(range(0, len(List))):
-    # for idx in tqdm(range(0, 5)):
-        labelList.append(List[idx].split(',')[0])
-        testX = txt_to_numpy(args.path_data + List[idx].split(',')[1].strip(), 1250).reshape(1, 1, 1250, 1)
+    if not os.path.exists(args.path_records):
+        os.makedirs(args.path_records)
+
+    for subject_id in subjects:
+      print(subject_id)
+      segs_TP = 0
+      segs_TN = 0
+      segs_FP = 0
+      segs_FN = 0
+      for idx in tqdm(range(len(dataList[subject_id]))):
+        testX = txt_to_numpy(args.path_data + dataList[subject_id][idx], 1250).reshape(1, 1, 1250, 1)
         testZ = np.arange(1250 + 1, dtype=np.int64)
         s = 1
         for i in range(0, testX.shape[0]):
-            for j in range(0, testX.shape[1]):
-                for k in range(0, testX.shape[2]):
-                    for l in range(0, testX.shape[3]):
-                        testZ[s] = int(float_to_hex(testX[i][j][k][0]), base=16)
-                        s += 1
-                        # print(k,":",testX[i][j][k][0])
+          for j in range(0, testX.shape[1]):
+            for k in range(0, testX.shape[2]):
+              for l in range(0, testX.shape[3]):
+                testZ[s] = int(float_to_hex(testX[i][j][k][0]), base=16)
+                s += 1
+                # print(k,":",testX[i][j][k][0])
         testW = np.asanyarray(testZ, dtype="uint32")
         ser.flushOutput()
         datalen = 1250
@@ -84,78 +172,69 @@ def main():
         result = ser.write(testW)
         # ser.in_waiting()
         while ser.in_waiting < 5:
-            pass
-            time.sleep(0.01)
+          pass
+          time.sleep(0.01)
         recv = ser.read(8)
         ser.reset_input_buffer()
 
         # the format of recv is ['<result>','<dutation>']
         result = recv[3]
-        if result == 0:
-            resultList.append('0')
+        if 'AFIB' in dataList[subject_id][idx]:
+          segs_FN += 1 if result == 0 else 0
+          segs_TP += 1 if result == 1 else 0
         else:
-            resultList.append('1')
+          segs_TN += 1 if result == 0 else 0
+          segs_FP += 1 if result == 1 else 0
+      f1 = round(F1([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
+      fb = round(FB([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
+      se = round(Sensitivity([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
+      sp = round(Specificity([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
+      bac = round(BAC([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
+      acc = round(ACC([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
+      ppv = round(PPV([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
+      npv = round(NPV([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
 
-        # tm_start = recv[4] | (recv[5] << 8) | (recv[6] << 16) | (recv[7] << 24)
-        # tm_end = recv[8] | (recv[9] << 8) | (recv[10] << 16) | (recv[11] << 24)
-        # s_tm_start = str(hex(tm_start))
-        # s_tm_end = str(hex(tm_end))
-        # f_tm_start = hex_to_float(s_tm_start)
-        # f_tm_end = hex_to_float(s_tm_end)
-        # print("f_tm_start",f_tm_start,"f_tm_end",f_tm_end)
-        tm_cost = recv[4] | (recv[5] << 8) | (recv[6] << 16) | (recv[7] << 24)
-        s_tm_cost = str(hex(tm_cost))
-        f_tm_cost = hex_to_float(s_tm_cost)
-        print("f_tm_cost", f_tm_cost)
-        # f_tm = f_tm_cost / 1000.0
+      subject_metrics.append([f1, fb, se, sp, bac, acc, ppv, npv])
+      if fb > 0.9:
+        subjects_above_threshold += 1
 
-        # inference latency in ms
-        timeList.append(f_tm_cost)
-        ofp.write(str(result) + ' ' + str(f_tm_cost) + ' \r')
-    ofp.close()
-    C_labelList = np.array(labelList).astype(int)
-    C_resultList = np.array(resultList).astype(int)
-    C = confusion_matrix(C_labelList, C_resultList, labels=[0, 1])
-    print(C)
+    subject_metrics_array = np.array(subject_metrics)
+    average_metrics = np.mean(subject_metrics_array, axis=0)
 
-    total_time = sum(timeList)
-    avg_time = np.mean(timeList)
-    acc = (C[0][0] + C[1][1]) / (C[0][0] + C[0][1] + C[1][0] + C[1][1])
-    precision = C[1][1] / (C[1][1] + C[0][1])
-    sensitivity = C[1][1] / (C[1][1] + C[1][0])
-    FP_rate = C[0][1] / (C[0][1] + C[0][0])
-    PPV = C[1][1] / (C[1][1] + C[1][0])
-    NPV = C[0][0] / (C[0][0] + C[0][1])
-    F1_score = (2 * precision * sensitivity) / (precision + sensitivity)
-    F_beta_score = (1 + 2 ** 2) * (precision * sensitivity) / ((2 ** 2) * precision + sensitivity)
+    avg_f1, avg_fb, avg_se, avg_sp, avg_bac, avg_acc, avg_ppv, avg_npv = average_metrics
 
-    print("\nacc: {},\nprecision: {},\nsensitivity: {},\nFP_rate: {},\nPPV: {},\nNPV: {},\nF1_score: {}, "
-          "\nF_beta_score: {},\ntotal_time: {}ms,\n average_time: {}ms".format(acc, precision, sensitivity, FP_rate,
-                                                                               PPV,
-                                                                               NPV, F1_score, F_beta_score,
-                                                                               total_time, avg_time))
+    # Print average metric values
+    print(f"Final F-1: {avg_f1:.5f}")
+    print(f"Final F-B: {avg_fb:.5f}")
+    print(f"Final SEN: {avg_se:.5f}")
+    print(f"Final SPE: {avg_sp:.5f}")
+    print(f"Final BAC: {avg_bac:.5f}")
+    print(f"Final ACC: {avg_acc:.5f}")
+    print(f"Final PPV: {avg_ppv:.5f}")
+    print(f"Final NPV: {avg_npv:.5f}")
 
-    f = open('./log/log_{}.txt'.format(t), 'a')
-    f.write("Accuracy: {}\n".format(acc))
-    f.write("Precision: {}\n".format(precision))
-    f.write("Sensitivity: {}\n".format(sensitivity))
-    f.write("FP_rate: {}\n".format(FP_rate))
-    f.write("PPV: {}\n".format(PPV))
-    f.write("NPV: {}\n".format(NPV))
-    f.write("F1_Score: {}\n".format(F1_score))
-    f.write("F_beta_Score: {}\n".format(F_beta_score))
-    f.write("Total_Time: {}ms\n".format(total_time))
-    f.write("Average_Time: {}ms\n\n".format(avg_time))
-    f.write(str(C) + "\n\n")
-    f.close()
+    proportion_above_threshold = subjects_above_threshold / len(subjects)
+    print("G Score:", proportion_above_threshold)
 
-    return 0
-
+    with open(args.path_records + 'seg_stat.txt', 'w') as f:
+        f.write(f"Final F-1: {avg_f1:.5f}\n")
+        f.write(f"Final F-B: {avg_fb:.5f}\n")
+        f.write(f"Final SEN: {avg_se:.5f}\n")
+        f.write(f"Final SPE: {avg_sp:.5f}\n")
+        f.write(f"Final BAC: {avg_bac:.5f}\n")
+        f.write(f"Final ACC: {avg_acc:.5f}\n")
+        f.write(f"Final PPV: {avg_ppv:.5f}\n")
+        f.write(f"Final NPV: {avg_npv:.5f}\n\n")
+        f.write(f"G Score: {proportion_above_threshold}\n")
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--com', type=str, default='com7')
     argparser.add_argument('--baudrate', type=int, default=115200)
-    argparser.add_argument('--path_data', type=str, default='./tinyml_contest_data_training/')
+    argparser.add_argument('--size', type=int, default=1250)
+    argparser.add_argument('--path_data', type=str, default='./data/training_dataset/')
+    argparser.add_argument('--path_net', type=str, default='./saved_models/')
+    argparser.add_argument('--path_record', type=str, default='./records/')
+    argparser.add_argument('--path_indices', type=str, default='./data_indices/')
     args = argparser.parse_args()
     main()
