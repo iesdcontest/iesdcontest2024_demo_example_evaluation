@@ -128,6 +128,7 @@ def main():
     # List to store metrics for each participant
     subject_metrics = []
     subjects_above_threshold = 0
+    timeList = []
 
     if not os.path.exists('./log/'):
         os.makedirs('./log/')
@@ -193,8 +194,11 @@ def main():
       acc = round(ACC([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
       ppv = round(PPV([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
       npv = round(NPV([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
-
+      tm_cost = recv[4] | (recv[5] << 8) | (recv[6] << 16) | (recv[7] << 24)
+      s_tm_cost = str(hex(tm_cost))
+      f_tm_cost = hex_to_float(s_tm_cost)
       subject_metrics.append([f1, fb, se, sp, bac, acc, ppv, npv])
+      timeList.append(f_tm_cost)
       if fb > 0.9:
         subjects_above_threshold += 1
 
@@ -202,7 +206,8 @@ def main():
     average_metrics = np.mean(subject_metrics_array, axis=0)
 
     avg_f1, avg_fb, avg_se, avg_sp, avg_bac, avg_acc, avg_ppv, avg_npv = average_metrics
-
+    total_time = sum(timeList)
+    avg_time = np.mean(timeList)
     # Print average metric values
     print(f"Final F-1: {avg_f1:.5f}")
     print(f"Final F-B: {avg_fb:.5f}")
@@ -212,6 +217,8 @@ def main():
     print(f"Final ACC: {avg_acc:.5f}")
     print(f"Final PPV: {avg_ppv:.5f}")
     print(f"Final NPV: {avg_npv:.5f}")
+    print(f"Total Time: {total_time}")
+    print(f"Average Time: {avg_time}")
 
     proportion_above_threshold = subjects_above_threshold / len(subjects)
     print("G Score:", proportion_above_threshold)
@@ -225,6 +232,8 @@ def main():
         f.write(f"Final ACC: {avg_acc:.5f}\n")
         f.write(f"Final PPV: {avg_ppv:.5f}\n")
         f.write(f"Final NPV: {avg_npv:.5f}\n\n")
+        f.write(f"Total Time: {total_time}\n")
+        f.write(f"Average Time: {avg_time}\n")
         f.write(f"G Score: {proportion_above_threshold}\n")
 
 if __name__ == '__main__':
@@ -234,7 +243,7 @@ if __name__ == '__main__':
     argparser.add_argument('--size', type=int, default=1250)
     argparser.add_argument('--path_data', type=str, default='./data/training_dataset/')
     argparser.add_argument('--path_net', type=str, default='./saved_models/')
-    argparser.add_argument('--path_record', type=str, default='./records/')
+    argparser.add_argument('--path_records', type=str, default='./records/')
     argparser.add_argument('--path_indices', type=str, default='./data_indices/')
     args = argparser.parse_args()
     main()
