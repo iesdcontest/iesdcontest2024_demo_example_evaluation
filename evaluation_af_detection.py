@@ -122,7 +122,7 @@ def FB(mylist, beta=2):
 
 def main():
 
-    test_indice_path = args.path_indices + 'test_indice.csv'
+    test_indice_path = args.path_indices + 'final_test_indice.csv'
     test_indices = pd.read_csv(test_indice_path)  # Adjust delimiter if necessary
     subjects = test_indices['Filename'].apply(lambda x: x.split('-')[0]).unique().tolist()
     # List to store metrics for each participant
@@ -150,12 +150,14 @@ def main():
         os.makedirs(args.path_records)
 
     for subject_id in subjects:
+    # for subject_id in ('S6','S7'):
       print(subject_id)
       segs_TP = 0
       segs_TN = 0
       segs_FP = 0
       segs_FN = 0
       for idx in tqdm(range(len(dataList[subject_id]))):
+      # for idx in tqdm(range(100)):
         testX = txt_to_numpy(args.path_data + dataList[subject_id][idx], 1250).reshape(1, 1, 1250, 1)
         testZ = np.arange(1250 + 1, dtype=np.int64)
         s = 1
@@ -177,9 +179,12 @@ def main():
           time.sleep(0.01)
         recv = ser.read(8)
         ser.reset_input_buffer()
-
         # the format of recv is ['<result>','<dutation>']
         result = recv[3]
+        tm_cost = recv[4] | (recv[5] << 8) | (recv[6] << 16) | (recv[7] << 24)
+        s_tm_cost = str(hex(tm_cost))
+        f_tm_cost = hex_to_float(s_tm_cost)
+        timeList.append(f_tm_cost)
         if 'AFIB' in dataList[subject_id][idx]:
           segs_FN += 1 if result == 0 else 0
           segs_TP += 1 if result == 1 else 0
@@ -194,11 +199,8 @@ def main():
       acc = round(ACC([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
       ppv = round(PPV([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
       npv = round(NPV([segs_TP, segs_FN, segs_FP, segs_TN]), 5)
-      tm_cost = recv[4] | (recv[5] << 8) | (recv[6] << 16) | (recv[7] << 24)
-      s_tm_cost = str(hex(tm_cost))
-      f_tm_cost = hex_to_float(s_tm_cost)
       subject_metrics.append([f1, fb, se, sp, bac, acc, ppv, npv])
-      timeList.append(f_tm_cost)
+
       if fb > 0.9:
         subjects_above_threshold += 1
 
@@ -223,7 +225,7 @@ def main():
     proportion_above_threshold = subjects_above_threshold / len(subjects)
     print("G Score:", proportion_above_threshold)
 
-    with open(args.path_records + 'seg_stat.txt', 'w') as f:
+    with open(args.path_records + 'seg_stat_'+time.strftime("%Y%m%d%H%M%S", time.localtime(time.time()))+'.txt', 'w') as f:
         f.write(f"Final F-1: {avg_f1:.5f}\n")
         f.write(f"Final F-B: {avg_fb:.5f}\n")
         f.write(f"Final SEN: {avg_se:.5f}\n")
@@ -241,7 +243,7 @@ if __name__ == '__main__':
     argparser.add_argument('--com', type=str, default='com7')
     argparser.add_argument('--baudrate', type=int, default=115200)
     argparser.add_argument('--size', type=int, default=1250)
-    argparser.add_argument('--path_data', type=str, default='./data/training_dataset/')
+    argparser.add_argument('--path_data', type=str, default='./data/testing_dataset/')
     argparser.add_argument('--path_net', type=str, default='./saved_models/')
     argparser.add_argument('--path_records', type=str, default='./records/')
     argparser.add_argument('--path_indices', type=str, default='./data_indices/')
